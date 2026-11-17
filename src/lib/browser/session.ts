@@ -1,32 +1,39 @@
-import chromium from '@sparticuz/chromium';
-import { chromium as playwright, type Browser, type Page } from 'playwright-core';
+import sparticuz from '@sparticuz/chromium';
+import { chromium, type Browser, type Page } from 'playwright-core';
 
 /**
- * One browser per agent run. Launched lazily on the first browser tool call and
- * closed when the run ends. On Vercel we use the serverless Chromium build; locally
- * set CHROME_PATH to a Chrome/Chromium binary.
+ * Browser for the agent's tools.
+ *
+ * On Vercel we first try the Chromium that `postinstall` bundles into node_modules
+ * (PLAYWRIGHT_BROWSERS_PATH=0), and fall back to @sparticuz/chromium if that fails.
+ * Locally, set CHROME_PATH or rely on the bundled Chromium.
  */
-export class BrowserSession {
-  private browser: Browser | null = null;
-  private page: Page | null = null;
-
-  async getPage(): Promise<Page> {
-    if (this.page) return this.page;
-    const onServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
-    this.browser = await playwright.launch({
-      headless: true,
-      executablePath: onServerless ? await chromium.executablePath() : process.env.CHROME_PATH,
-      args: onServerless ? chromium.args : [],
-    });
-    const context = await this.browser.newContext({ viewport: { width: 1280, height: 800 } });
-    this.page = await context.newPage();
-    this.page.setDefaultTimeout(15_000);
-    return this.page;
+async function launch(): Promise<Browser> {
+  const onServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  if (!onServerless) {
+    return chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || undefined });
   }
+  try {
+    process.env.PLAYWRIGHT_BROWSERS_PATH = '0';
+    return await chromium.launch({ headless: true });
+  } catch {
+    return chromium.launch({
+      headless: true,
+      executablePath: await sparticuz.executablePath(),
+      args: sparticuz.args,
+    });
+  }
+}
 
-  async close() {
-    await this.browser?.close().catch(() => {});
-    this.browser = null;
-    this.page = null;
+/** A fresh browser for each tool call, so one bad page can't break the next call. */
+export async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
+  const browser = await launch();
+  try {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    page.setDefaultTimeout(45_000);
+    return await fn(page);
+  } finally {
+    await browser.close().catch(() => {});
   }
 }

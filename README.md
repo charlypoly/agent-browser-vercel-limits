@@ -17,8 +17,9 @@ Open http://localhost:3000.
 ## Project layout
 
 - `src/lib/agent.ts`: model, system prompt and agent loop (`streamText` with tools)
-- `src/lib/tools/`: tools the agent can call (`browser.ts`: open, click, type, read)
-- `src/lib/browser/session.ts`: headless Chromium per agent run (`@sparticuz/chromium` on Vercel, `CHROME_PATH` locally)
+- `src/lib/tools/browser.ts`: browser tools (`browserOpen`, `browserAct`)
+- `src/lib/browser/session.ts`: launches Chromium for each tool call (bundled Playwright Chromium on Vercel, falling back to `@sparticuz/chromium`)
+- `scripts/check-function-size.mjs`: `npm run check:size` after a build reports the `/api/chat` function size
 - `src/app/api/chat/route.ts`: streaming chat endpoint
 - `src/app/page.tsx`: chat UI (`useChat`)
 
@@ -26,3 +27,17 @@ Open http://localhost:3000.
 
 The app is deployed on Vercel. Push to `main` to deploy; set `AI_GATEWAY_API_KEY`
 (or use the Vercel AI Gateway OIDC token) in the project settings.
+
+## Known issues
+
+Production deploys started failing after we bundled Chromium:
+
+```
+Error: The Serverless Function "api/chat" is 776.2 MB which exceeds the maximum size limit of 250 MB.
+```
+
+Before that, browser tasks on long pages regularly hit the function limit:
+
+```
+Task timed out after 60.00 seconds
+```

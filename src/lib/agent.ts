@@ -1,7 +1,6 @@
 import { streamText, convertToModelMessages, isStepCount, type UIMessage } from 'ai';
 import { tools } from './tools';
-import { createBrowserTools } from './tools/browser';
-import { BrowserSession } from './browser/session';
+import { browserTools } from './tools/browser';
 
 export const MODEL = process.env.AI_MODEL ?? 'anthropic/claude-sonnet-5.5';
 
@@ -10,17 +9,11 @@ You can browse websites with the browser tools: open pages, click, fill forms an
 Use the available tools when they help. Be concise.`;
 
 export async function runAgent(messages: UIMessage[]) {
-  const browser = new BrowserSession();
   return streamText({
     model: MODEL,
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
-    tools: { ...tools, ...createBrowserTools(browser) },
+    tools: { ...tools, ...browserTools },
     stopWhen: isStepCount(20),
-    onFinish: () => browser.close(),
-    onError: () => {
-      void browser.close();
-    },
-    onAbort: () => browser.close(),
   });
 }
